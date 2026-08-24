@@ -48,6 +48,7 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/playwright ./node_modules/playwright
 COPY --from=builder /app/node_modules/playwright-core ./node_modules/playwright-core
+COPY --chown=nextjs:nodejs docker/entrypoint.sh ./docker/entrypoint.sh
 
 RUN chown -R nextjs:nodejs node_modules/@prisma node_modules/prisma
 
@@ -57,4 +58,9 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["sh", "-c", "until node node_modules/prisma/build/index.js migrate deploy; do echo 'Database not ready, retrying in 5s...'; sleep 5; done && node server.js"]
+# Reports unhealthy — rather than a misleading "Up" — when the app cannot serve
+# requests or cannot reach the database.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1
+
+CMD ["/app/docker/entrypoint.sh"]
