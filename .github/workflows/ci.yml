@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  migrations:
+    name: Migrations apply to an empty database
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dnastudio
+          POSTGRES_USER: dnastudio
+          POSTGRES_PASSWORD: dnastudio
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dnastudio"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://dnastudio:dnastudio@localhost:5432/dnastudio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      # Regression test for #8: migrations are applied in lexicographic order of
+      # their directory name, so a badly named migration can run before the one
+      # that creates the tables it touches. That broke every fresh install and
+      # nothing caught it. This job is what catches it now.
+      - name: Apply migrations to an empty database
+        run: npx prisma migrate deploy
+
+      - name: No migrations left pending
+        run: npx prisma migrate status
+
+      - name: Migrated schema matches schema.prisma
+        run: |
+          npx prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code
+
+  entrypoint:
+    name: Container entrypoint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Regression test for #9: transient database failures are retried, a
+      # bounded number of times; deterministic ones abort with the real error.
+      - run: sh docker/entrypoint.test.sh
+
+  build:
+    name: Lint, typecheck, build
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://dnastudio:dnastudio@localhost:5432/dnastudio
+      NEXTAUTH_SECRET: placeholder-for-ci-only
+      NEXTAUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+
+  compose:
+    name: docker compose up (end to end)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the stack
+        run: docker compose up -d --build app
+
+      - name: Wait for the app to report healthy
+        run: |
+          container="$(docker compose ps -q app)"
+          for _ in $(seq 1 60); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' "$container" 2>/dev/null || echo unknown)"
+            echo "health: $status"
+            case "$status" in
+              healthy) exit 0 ;;
+              unhealthy) echo "app reported unhealthy"; exit 1 ;;
+            esac
+            sleep 5
+          done
+          echo "app never became healthy"
+          exit 1
+
+      - name: Every migration is applied
+        run: |
+          docker compose exec -T app \
+            node node_modules/prisma/build/index.js migrate status
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

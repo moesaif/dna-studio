@@ -70,9 +70,10 @@ export default function CampaignPage() {
     if (pending.length === 0) return;
 
     autoGenStarted.current = true;
-    setAutoGenProgress({ done: 0, total: pending.length });
 
     (async () => {
+      setAutoGenProgress({ done: 0, total: pending.length });
+
       for (let i = 0; i < pending.length; i++) {
         const asset = pending[i];
         try {
