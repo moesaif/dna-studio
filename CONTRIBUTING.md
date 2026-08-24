@@ -82,6 +82,11 @@ src/
    npm run build
    ```
 
+   If you touched `docker/entrypoint.sh`, also run its tests:
+   ```bash
+   sh docker/entrypoint.test.sh
+   ```
+
 6. **Commit with clear messages** — describe what and why, not how
 
 7. **Open a PR** against `main`
@@ -103,8 +108,36 @@ src/
 ## Database Changes
 
 - Add fields to `prisma/schema.prisma`
-- Create a migration file in `prisma/migrations/YYYYMMDD_description/migration.sql`
+- Create a migration file in `prisma/migrations/<name>/migration.sql`
 - Run `npx prisma generate` to update the client
+
+### Migration naming
+
+Prisma applies migrations in **lexicographic order of the directory name** — not
+by date, not by creation time. A migration whose name sorts before an earlier one
+will run before it, against a schema that does not exist yet.
+
+This has already broken the project once ([#8](https://github.com/moesaif/dna-studio/issues/8)):
+`20260317_add_settings_suggestions` sorted ahead of `20260317_init` because
+`"a" < "i"`, so an `ALTER TABLE` ran before the table was created — and every
+fresh install failed to migrate for months.
+
+So:
+
+- **Do not reuse a date prefix another migration already uses** unless the new
+  name also sorts after it. Appending a letter — `20260317b_add_something` — is
+  the safest way to add a second migration to a date that is already taken.
+- A full timestamp such as `20260317120000_add_something` does **not** fix this:
+  digits sort before `_` (`0x31` < `0x5F`), so it still lands ahead of
+  `20260317_init`.
+- **Do not rename or edit a migration that has already shipped.** Prisma
+  checksums each file and records the directory name in `_prisma_migrations`;
+  changing either breaks databases that already applied it. If a rename is
+  genuinely unavoidable, make the SQL idempotent (`ADD COLUMN IF NOT EXISTS`)
+  so re-applying it under the new name is a no-op.
+
+CI applies every migration to an empty database on each pull request, so an
+ordering mistake fails the build rather than shipping.
 
 ## Reporting Issues
 
