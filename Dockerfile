@@ -48,6 +48,42 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/playwright ./node_modules/playwright
 COPY --from=builder /app/node_modules/playwright-core ./node_modules/playwright-core
+
+# The Prisma CLI runs `migrate deploy` at container start (docker/entrypoint.sh),
+# so its dependencies have to be present at runtime. Since Prisma 6, the CLI
+# pulls in @prisma/config, which brings the packages below with it — without
+# them the container starts and immediately dies with
+# "Cannot find module 'effect'".
+#
+# This list is the transitive closure of the `prisma` package. If a future
+# Prisma upgrade changes it, the `compose` job in .github/workflows/ci.yml
+# fails: it boots the real image and waits for the healthcheck.
+COPY --from=builder /app/node_modules/@standard-schema ./node_modules/@standard-schema
+COPY --from=builder /app/node_modules/c12 ./node_modules/c12
+COPY --from=builder /app/node_modules/chokidar ./node_modules/chokidar
+COPY --from=builder /app/node_modules/citty ./node_modules/citty
+COPY --from=builder /app/node_modules/confbox ./node_modules/confbox
+COPY --from=builder /app/node_modules/consola ./node_modules/consola
+COPY --from=builder /app/node_modules/deepmerge-ts ./node_modules/deepmerge-ts
+COPY --from=builder /app/node_modules/defu ./node_modules/defu
+COPY --from=builder /app/node_modules/destr ./node_modules/destr
+COPY --from=builder /app/node_modules/dotenv ./node_modules/dotenv
+COPY --from=builder /app/node_modules/effect ./node_modules/effect
+COPY --from=builder /app/node_modules/empathic ./node_modules/empathic
+COPY --from=builder /app/node_modules/exsolve ./node_modules/exsolve
+COPY --from=builder /app/node_modules/fast-check ./node_modules/fast-check
+COPY --from=builder /app/node_modules/giget ./node_modules/giget
+COPY --from=builder /app/node_modules/jiti ./node_modules/jiti
+COPY --from=builder /app/node_modules/node-fetch-native ./node_modules/node-fetch-native
+COPY --from=builder /app/node_modules/nypm ./node_modules/nypm
+COPY --from=builder /app/node_modules/ohash ./node_modules/ohash
+COPY --from=builder /app/node_modules/pathe ./node_modules/pathe
+COPY --from=builder /app/node_modules/perfect-debounce ./node_modules/perfect-debounce
+COPY --from=builder /app/node_modules/pkg-types ./node_modules/pkg-types
+COPY --from=builder /app/node_modules/pure-rand ./node_modules/pure-rand
+COPY --from=builder /app/node_modules/rc9 ./node_modules/rc9
+COPY --from=builder /app/node_modules/readdirp ./node_modules/readdirp
+COPY --from=builder /app/node_modules/tinyexec ./node_modules/tinyexec
 COPY --chown=nextjs:nodejs docker/entrypoint.sh ./docker/entrypoint.sh
 
 RUN chown -R nextjs:nodejs node_modules/@prisma node_modules/prisma
