@@ -113,6 +113,62 @@ All configuration is done via environment variables. See [`.env.example`](.env.e
 | `GOOGLE_API_KEY` | Google API key (if using Gemini) | Conditional |
 | `OLLAMA_BASE_URL` | Ollama server URL (if using local models) | Conditional |
 
+## Troubleshooting
+
+### Is it running?
+
+The app exposes a health endpoint, which the container healthcheck uses:
+
+```bash
+curl http://localhost:3000/api/health
+# {"status":"ok","database":"reachable"}
+```
+
+`docker compose ps` reports the app as `healthy` only once it is serving
+requests *and* can reach the database.
+
+### The app container keeps restarting
+
+Read the logs — the app prints the underlying Prisma error and exits, rather
+than retrying a failure that cannot succeed:
+
+```bash
+docker compose logs app
+```
+
+Genuine "the database is not up yet" failures are retried (10 attempts, 5s
+apart — tune with `MIGRATE_MAX_ATTEMPTS` and `MIGRATE_RETRY_DELAY`). Anything
+else stops the container with the real error.
+
+### `P3009: migrate found failed migrations in the target database`
+
+A migration is recorded as failed, which blocks every migration after it.
+
+Releases before this fix shipped a migration ordering bug ([#8](https://github.com/moesaif/dna-studio/issues/8))
+that put **every** fresh install into this state, so if you tried DNA Studio
+earlier and it never came up, this is why.
+
+Inspect the history:
+
+```bash
+docker compose exec app node node_modules/prisma/build/index.js migrate status
+```
+
+Postgres rolls a failed migration back, so the failed entry almost always
+represents no schema change at all. Clear it and let migrations run again:
+
+```bash
+docker compose exec app node node_modules/prisma/build/index.js \
+  migrate resolve --rolled-back 20260317_add_settings_suggestions
+docker compose restart app
+```
+
+If the database holds nothing you need, starting clean is simpler:
+
+```bash
+docker compose down -v && docker compose up -d
+```
+
 ## Comparison
 
 | Feature | DNA Studio | Google Pomelli | Canva AI |
@@ -154,6 +210,7 @@ dna-studio/
 │       └── auth/       # NextAuth configuration
 ├── prisma/             # Database schema and migrations
 ├── workers/            # BullMQ background workers
+├── docker/             # Container entrypoint (+ its tests)
 ├── docker-compose.yml  # One-command deployment
 └── Dockerfile
 ```

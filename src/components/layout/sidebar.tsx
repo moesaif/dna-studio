@@ -47,14 +47,6 @@ export function Sidebar() {
       });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Sync active brand with URL
-  useEffect(() => {
-    const match = pathname.match(/^\/brands\/([^/]+)/);
-    if (match) {
-      setActiveBrandId(match[1]);
-    }
-  }, [pathname]);
-
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -64,6 +56,14 @@ export function Sidebar() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // Keep the active brand in step with the URL. Adjusting state during render
+  // rather than in an effect avoids a cascading re-render, and keeps the last
+  // visited brand selected after navigating away from /brands/[id].
+  const brandIdFromUrl = pathname.match(/^\/brands\/([^/]+)/)?.[1] ?? null;
+  if (brandIdFromUrl && brandIdFromUrl !== activeBrandId) {
+    setActiveBrandId(brandIdFromUrl);
+  }
 
   const activeBrand = brands.find((b) => b.id === activeBrandId);
 
