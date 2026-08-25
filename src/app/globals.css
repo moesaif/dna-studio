@@ -16,16 +16,26 @@
   --color-warning: #FBBF24;
   --color-danger: #F87171;
 
-  --font-sans: "General Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-heading: "Playfair Display", "Georgia", serif;
 }
 
-@font-face {
-  font-family: "General Sans";
-  src: url("/fonts/GeneralSans-Variable.woff2") format("woff2");
-  font-weight: 200 700;
-  font-display: swap;
-}
+/*
+ * The body font is the system sans stack. A previous @font-face pointed at
+ * /fonts/GeneralSans-Variable.woff2, which was never committed, so it 404'd on
+ * every page load and the stack below is what everyone actually rendered.
+ *
+ * To self-host a custom sans instead, drop the file in public/fonts/ and add:
+ *
+ *   @font-face {
+ *     font-family: "Your Font";
+ *     src: url("/fonts/YourFont-Variable.woff2") format("woff2");
+ *     font-weight: 200 700;
+ *     font-display: swap;
+ *   }
+ *
+ * then put "Your Font" at the front of --font-sans above.
+ */
 
 body {
   background: var(--color-background);
