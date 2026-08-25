@@ -198,6 +198,7 @@ docker compose down -v && docker compose up -d
 - **Web Scraping**: Playwright (headless Chromium)
 - **AI**: Provider-agnostic — text (OpenAI, Anthropic, Gemini, Ollama), image (OpenAI, Gemini, Stability, Replicate), video (Veo, HeyGen, D-ID)
 - **Auth**: NextAuth.js (credentials + Google OAuth)
+- **Testing**: Vitest
 - **Deployment**: Docker Compose
 
 ## Project Structure
@@ -240,10 +241,11 @@ dna-studio/
 - [x] UGC video generation with creator avatars (Veo, HeyGen, D-ID)
 - [x] Health endpoint (`/api/health`) and container healthcheck
 - [x] CI on every pull request — migrations, entrypoint, build, and a full `docker compose` boot
+- [x] Test suite — 483 tests over the library and API routes, with a coverage gate in CI
 
 ### Up Next
 
-- [ ] Test suite for the application code (providers, API routes, campaign generation)
+- [ ] Component and page tests (the suite covers `src/lib` and `src/app/api` today)
 
 - [ ] A/B testing for campaign variants
 - [ ] Analytics dashboard (post performance tracking)
