@@ -13,7 +13,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const body = await request.json();
     const { prompt, size, assetId } = schema.parse(body);
 
@@ -21,10 +21,16 @@ export async function POST(request: Request) {
     const { url: imageUrl } = await provider.generate(prompt, { size: size as ImageSize });
 
     if (assetId) {
-      await prisma.asset.update({
-        where: { id: assetId },
+      // Scoped through the campaign relation: updating by id alone let any
+      // signed-in caller overwrite an asset belonging to another account.
+      const { count } = await prisma.asset.updateMany({
+        where: { id: assetId, campaign: { userId: session.user.id } },
         data: { imageUrl },
       });
+
+      if (count === 0) {
+        return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+      }
     }
 
     return NextResponse.json({ url: imageUrl });

@@ -77,7 +77,14 @@ src/
    npm run lint
    ```
 
-5. **Build successfully**:
+5. **Run the tests**:
+   ```bash
+   npm test              # once
+   npm run test:watch    # while developing
+   npm run test:coverage # with the coverage gate
+   ```
+
+6. **Build successfully**:
    ```bash
    npm run build
    ```
@@ -87,9 +94,9 @@ src/
    sh docker/entrypoint.test.sh
    ```
 
-6. **Commit with clear messages** — describe what and why, not how
+7. **Commit with clear messages** — describe what and why, not how
 
-7. **Open a PR** against `main`
+8. **Open a PR** against `main`
 
 ## Adding a New LLM Provider
 
@@ -104,6 +111,36 @@ src/
 2. Add the provider type to `src/lib/image/client.ts`
 3. Add env vars to `.env.example` and `docker-compose.yml`
 4. Update `src/lib/settings/resolve.ts`
+
+## Testing
+
+Tests live in `tests/`, mirroring `src/`, and run on [Vitest](https://vitest.dev).
+
+```bash
+npm test                                  # whole suite
+npm test -- tests/lib/settings            # one directory
+npm test -- -t "masks stored API keys"    # one test by name
+```
+
+What is covered, and what is not:
+
+- **`src/lib`** — pure logic, provider clients, and every AI/social provider, with
+  the SDK or `fetch` mocked. No network, no database.
+- **`src/app/api`** — route handlers called directly, with `@/lib/db` and
+  `@/lib/auth/session` mocked. Every route has a signed-out case, and every route
+  that touches a record asserts it is scoped to the signed-in user.
+- **Not covered yet** — React components and pages. The coverage gate in
+  `vitest.config.mts` is scoped to `src/lib` and `src/app/api` for that reason,
+  at 80% of lines, statements, branches, and functions.
+
+Two things to know before writing tests here:
+
+- `beforeEach(() => someMock.mockResolvedValue(x))` is a trap. The arrow returns
+  the mock, and Vitest treats a returned function as a teardown callback, so it
+  calls the mock again after the test. Use a block body.
+- Provider clients (`src/lib/{llm,image,video}/client.ts`) memoise at module
+  scope. Call `vi.resetModules()` and re-import between tests, as the existing
+  tests do, or you will inherit the previous test's provider.
 
 ## Database Changes
 
