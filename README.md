@@ -12,12 +12,14 @@
   <a href="#features">Features</a> &bull;
   <a href="#quick-start">Quick Start</a> &bull;
   <a href="#configuration">Configuration</a> &bull;
+  <a href="#troubleshooting">Troubleshooting</a> &bull;
   <a href="#comparison">Comparison</a> &bull;
   <a href="#roadmap">Roadmap</a> &bull;
   <a href="#contributing">Contributing</a>
 </p>
 
 <p align="center">
+  <a href="https://github.com/moesaif/dna-studio/actions/workflows/ci.yml"><img src="https://github.com/moesaif/dna-studio/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License" />
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED.svg" alt="Docker" />
@@ -51,6 +53,8 @@ DNA Studio analyzes any website URL to extract a **Brand DNA** profile — color
 - **AI Photoshoot Studio** — Upload a product image, choose from 29 templates across 6 categories (General, Beauty, Fashion, Food, Home, Tech), and generate up to 4 styled product shots in parallel. Sessions are saved and browsable.
 
 - **AI Image Generation** — Supports OpenAI DALL-E, Google Gemini native image generation, Stability AI, and Replicate Flux. Provider-agnostic — switch with one setting.
+
+- **UGC Video Generation** — Pick a creator avatar, write or generate a script, and produce a short user-generated-content style video. Provider-agnostic across Google Veo, HeyGen, and D-ID.
 
 - **Smart Campaign Suggestions** — AI analyzes your brand DNA and generates tailored campaign ideas. Cached per brand for instant load.
 
@@ -112,6 +116,8 @@ All configuration is done via environment variables. See [`.env.example`](.env.e
 | `ANTHROPIC_API_KEY` | Anthropic API key (if using Anthropic) | Conditional |
 | `GOOGLE_API_KEY` | Google API key (if using Gemini) | Conditional |
 | `OLLAMA_BASE_URL` | Ollama server URL (if using local models) | Conditional |
+| `IMAGE_PROVIDER` | Image generation: `openai`, `gemini`, `stability`, `replicate` | No (defaults to `openai`) |
+| `VIDEO_PROVIDER` | UGC video generation: `veo`, `heygen`, `did` | No (defaults to `veo`) |
 
 ## Troubleshooting
 
@@ -184,12 +190,13 @@ docker compose down -v && docker compose up -d
 
 ## Tech Stack
 
-- **Frontend**: Next.js 16 + TypeScript + Tailwind CSS v4 + Framer Motion
-- **Backend**: Next.js API Routes + Prisma ORM
-- **Database**: PostgreSQL
-- **Queue**: BullMQ + Redis
+- **Runtime**: Node.js 20+
+- **Frontend**: Next.js 16 + React 19 + TypeScript 5 + Tailwind CSS v4 + Framer Motion
+- **Backend**: Next.js API Routes + Prisma 6 ORM
+- **Database**: PostgreSQL 16
+- **Queue**: BullMQ + Redis 7
 - **Web Scraping**: Playwright (headless Chromium)
-- **AI**: Provider-agnostic (OpenAI, Anthropic, Ollama, Gemini) — text + image generation
+- **AI**: Provider-agnostic — text (OpenAI, Anthropic, Gemini, Ollama), image (OpenAI, Gemini, Stability, Replicate), video (Veo, HeyGen, D-ID)
 - **Auth**: NextAuth.js (credentials + Google OAuth)
 - **Deployment**: Docker Compose
 
@@ -230,8 +237,13 @@ dna-studio/
 - [x] Vision-powered product analysis — AI describes uploaded product images
 - [x] Favicon-based brand logo fallback
 - [x] Docker Compose one-command deployment
+- [x] UGC video generation with creator avatars (Veo, HeyGen, D-ID)
+- [x] Health endpoint (`/api/health`) and container healthcheck
+- [x] CI on every pull request — migrations, entrypoint, build, and a full `docker compose` boot
 
 ### Up Next
+
+- [ ] Test suite for the application code (providers, API routes, campaign generation)
 
 - [ ] A/B testing for campaign variants
 - [ ] Analytics dashboard (post performance tracking)
