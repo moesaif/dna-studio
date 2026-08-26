@@ -76,4 +76,18 @@ describe("POST /api/settings/providers/test", () => {
     expect((await testProvider(post({ kind: "llm", providerId: "openai", credential: "x" }))).status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("answers 400 for a request that fails schema validation", async () => {
+    const response = await testProvider(post({ kind: "hal9000", providerId: "openai", credential: "x" }));
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ ok: false });
+  });
+
+  it("answers 500 without leaking the underlying error when the credential lookup fails", async () => {
+    user.findUnique.mockRejectedValue(new Error("db down"));
+    const response = await testProvider(post({ kind: "llm", providerId: "openai" }));
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(JSON.stringify(body)).not.toContain("db down");
+  });
 });
