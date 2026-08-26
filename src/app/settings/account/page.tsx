@@ -115,7 +115,13 @@ export default function AccountPage() {
         {account.hasPassword && (
           <Input label="Current password" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
         )}
-        <Input label="New password" type="password" value={next} onChange={(e) => setNext(e.target.value)} />
+        <Input
+          label="New password"
+          type="password"
+          value={next}
+          onChange={(e) => setNext(e.target.value)}
+          error={next && next.length < 8 ? "At least 8 characters" : undefined}
+        />
         <Input
           label="Confirm new password"
           type="password"
@@ -125,7 +131,7 @@ export default function AccountPage() {
         />
         <Button
           size="sm"
-          disabled={!next || next !== confirm}
+          disabled={!next || next !== confirm || next.length < 8}
           onClick={async () => {
             const ok = await send(
               "/api/account/password",
