@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import { findProvider, type CredentialField, type ProviderKind } from "@/lib/providers/registry";
 
 export interface ResolvedSettings {
   llmProvider: string;
@@ -12,7 +13,7 @@ export interface ResolvedSettings {
   videoApiKey: string;
 }
 
-interface UserSettings {
+export interface UserSettings {
   llmProvider?: string;
   llmApiKey?: string;
   llmModel?: string;
@@ -21,6 +22,44 @@ interface UserSettings {
   imageApiKey?: string;
   videoProvider?: string;
   videoApiKey?: string;
+}
+
+export type CredentialOrigin = "user" | "env" | "none";
+
+export interface ResolvedCredential {
+  value: string;
+  origin: CredentialOrigin;
+  envVar?: string;
+}
+
+const KIND_OF_FIELD: Record<CredentialField, ProviderKind> = {
+  llmApiKey: "llm",
+  ollamaUrl: "llm",
+  imageApiKey: "image",
+  videoApiKey: "video",
+};
+
+/**
+ * Resolve one credential the way the app actually consumes it: a value saved
+ * in settings wins, otherwise the environment variable that backs the selected
+ * provider. Never borrows another provider's key.
+ */
+export function resolveCredential(
+  field: CredentialField,
+  providerId: string,
+  userSettings: UserSettings,
+  env: Partial<NodeJS.ProcessEnv> = process.env
+): ResolvedCredential {
+  const provider = findProvider(KIND_OF_FIELD[field], providerId);
+  const envVar = provider?.credential.envVar;
+
+  const saved = userSettings[field];
+  if (saved) return { value: saved, origin: "user", envVar };
+
+  const fromEnv = envVar ? env[envVar] : undefined;
+  if (fromEnv) return { value: fromEnv, origin: "env", envVar };
+
+  return { value: "", origin: "none", envVar };
 }
 
 /**
@@ -46,21 +85,7 @@ export async function resolveSettings(): Promise<ResolvedSettings> {
 
   const llmProvider = userSettings.llmProvider || process.env.LLM_PROVIDER || "openai";
 
-  // Resolve the correct API key based on provider
-  let llmApiKey = userSettings.llmApiKey || "";
-  if (!llmApiKey) {
-    switch (llmProvider) {
-      case "openai":
-        llmApiKey = process.env.OPENAI_API_KEY || "";
-        break;
-      case "anthropic":
-        llmApiKey = process.env.ANTHROPIC_API_KEY || "";
-        break;
-      case "gemini":
-        llmApiKey = process.env.GOOGLE_API_KEY || "";
-        break;
-    }
-  }
+  const llmApiKey = resolveCredential("llmApiKey", llmProvider, userSettings).value;
 
   // Resolve model
   let llmModel = userSettings.llmModel || "";
@@ -83,46 +108,20 @@ export async function resolveSettings(): Promise<ResolvedSettings> {
 
   const imageProvider = userSettings.imageProvider || process.env.IMAGE_PROVIDER || "openai";
 
-  let imageApiKey = userSettings.imageApiKey || "";
-  if (!imageApiKey) {
-    switch (imageProvider) {
-      case "openai":
-        imageApiKey = process.env.OPENAI_API_KEY || "";
-        break;
-      case "stability":
-        imageApiKey = process.env.STABILITY_API_KEY || "";
-        break;
-      case "replicate":
-        imageApiKey = process.env.REPLICATE_API_TOKEN || "";
-        break;
-      case "gemini":
-        imageApiKey = process.env.GOOGLE_API_KEY || "";
-        break;
-    }
-  }
+  const imageApiKey = resolveCredential("imageApiKey", imageProvider, userSettings).value;
 
   const videoProvider = userSettings.videoProvider || process.env.VIDEO_PROVIDER || "veo";
 
-  let videoApiKey = userSettings.videoApiKey || "";
-  if (!videoApiKey) {
-    switch (videoProvider) {
-      case "veo":
-        videoApiKey = process.env.GOOGLE_API_KEY || "";
-        break;
-      case "heygen":
-        videoApiKey = process.env.HEYGEN_API_KEY || "";
-        break;
-      case "did":
-        videoApiKey = process.env.DID_API_KEY || "";
-        break;
-    }
-  }
+  const videoApiKey = resolveCredential("videoApiKey", videoProvider, userSettings).value;
+
+  const ollamaUrl =
+    resolveCredential("ollamaUrl", "ollama", userSettings).value || "http://localhost:11434";
 
   return {
     llmProvider,
     llmApiKey,
     llmModel,
-    ollamaUrl: userSettings.ollamaUrl || process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+    ollamaUrl,
     imageProvider,
     imageApiKey,
     videoProvider,
