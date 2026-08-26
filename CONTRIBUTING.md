@@ -104,6 +104,10 @@ src/
 2. Add the provider type to `src/lib/llm/client.ts`
 3. Add env vars to `.env.example` and `docker-compose.yml`
 4. Update `src/lib/settings/resolve.ts` for the new provider
+5. Add an entry to `src/lib/providers/registry.ts` so the provider appears in
+   Settings, with its `envVar` and a `test()` that makes one cheap read-only
+   call. The registry test asserts every `envVar` is documented in
+   `.env.example`.
 
 ## Adding a New Image Provider
 
@@ -111,6 +115,21 @@ src/
 2. Add the provider type to `src/lib/image/client.ts`
 3. Add env vars to `.env.example` and `docker-compose.yml`
 4. Update `src/lib/settings/resolve.ts`
+5. Add an entry to `src/lib/providers/registry.ts` so the provider appears in
+   Settings, with its `envVar` and a `test()` that makes one cheap read-only
+   call. The registry test asserts every `envVar` is documented in
+   `.env.example`.
+
+## Adding a New Video Provider
+
+1. Create `src/lib/video/providers/your-provider.ts` implementing the `VideoProvider` interface
+2. Add the provider type to `src/lib/video/client.ts`
+3. Add env vars to `.env.example` and `docker-compose.yml`
+4. Update `src/lib/settings/resolve.ts` for the new provider
+5. Add an entry to `src/lib/providers/registry.ts` so the provider appears in
+   Settings, with its `envVar` and a `test()` that makes one cheap read-only
+   call. The registry test asserts every `envVar` is documented in
+   `.env.example`.
 
 ## Testing
 
