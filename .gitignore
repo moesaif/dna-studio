@@ -47,3 +47,6 @@ public/ugc/*.mp4
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# brainstorming visual companion sessions
+.superpowers/
