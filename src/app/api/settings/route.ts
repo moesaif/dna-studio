@@ -74,8 +74,12 @@ function buildSources(settings: UserSettings, effective: EffectiveProviders) {
 
     const { origin, envVar, value } = resolveCredentialWithDefault(field, providerId, settings);
     // A base URL is configuration, not a secret. Masking it would show the user
-    // "http••••1434" in place of the value they typed.
-    const isUrl = findProvider(kind, providerId)?.credential.type === "url";
+    // "http••••1434" in place of the value they typed. This must be keyed off
+    // the field being described, not the selected provider: on the
+    // llmApiKey iteration, providerId may be "ollama" even though value is a
+    // saved OpenAI/Anthropic key, and that key must still be masked.
+    const def = findProvider(kind, providerId);
+    const isUrl = def?.credential.field === field && def.credential.type === "url";
     sources[field] = {
       source: origin,
       envVar,

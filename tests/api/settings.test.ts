@@ -269,6 +269,16 @@ describe("GET /api/settings sources", () => {
     expect(body.sources.llmApiKey.masked).toBe("sk-a••••ijkl");
   });
 
+  it("masks a saved llm key even when the selected provider is ollama", async () => {
+    user.findUnique.mockResolvedValue({
+      settings: { llmProvider: "ollama", llmApiKey: "sk-abcdefghijkl" },
+    } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(JSON.stringify(body)).not.toContain("sk-abcdefghijkl");
+  });
+
   it("covers every credential field the registry defines", async () => {
     user.findUnique.mockResolvedValue({ settings: {} } as never);
 
