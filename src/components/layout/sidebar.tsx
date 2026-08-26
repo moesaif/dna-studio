@@ -72,7 +72,7 @@ export function Sidebar() {
     { href: "/campaigns/new", label: "Campaigns", icon: Megaphone },
     { href: "/photoshoot", label: "Photoshoot", icon: Camera },
     { href: "/ugc", label: "UGC Studio", icon: Video },
-    { href: "/settings/providers", label: "Settings", icon: Settings },
+    { href: "/settings", label: "Settings", icon: Settings },
   ];
 
   return (
