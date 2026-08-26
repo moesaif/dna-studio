@@ -7,8 +7,14 @@ import { cn } from "@/lib/utils";
 import { providersOfKind, type ProviderKind } from "@/lib/providers/registry";
 
 export interface SourceInfo {
-  source: "user" | "env" | "none";
+  /** "default" is a documented fallback that works unconfigured (the Ollama base URL). */
+  source: "user" | "env" | "default" | "none";
   envVar?: string;
+  /**
+   * What to show in the empty input. API keys arrive masked from the server;
+   * URL credentials arrive in the clear, because a base URL is configuration
+   * rather than a secret and "http••••1434" reads as corruption.
+   */
   masked?: string;
 }
 
@@ -104,6 +110,8 @@ export function ProviderSection({
           <span className="text-success">✓ saved here</span>
         ) : source.source === "env" ? (
           <span className="text-success">✓ from your environment ({source.envVar})</span>
+        ) : source.source === "default" ? (
+          <span className="text-success">✓ using the default ({source.masked})</span>
         ) : (
           <span className="text-warning">
             ⚠ Not configured — {feature} will fail until this is set

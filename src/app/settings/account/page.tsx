@@ -16,14 +16,26 @@ export default function AccountPage() {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
-    fetch("/api/account").then((r) => r.json()).then((a: Account) => {
-      setAccount(a);
-      setName(a.name ?? "");
-      setEmail(a.email ?? "");
-    });
+    fetch("/api/account")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((a: Account | null) => {
+        if (!a) {
+          setLoadFailed(true);
+          return;
+        }
+        setAccount(a);
+        setName(a.name ?? "");
+        setEmail(a.email ?? "");
+      })
+      .catch(() => setLoadFailed(true));
   }, []);
+
+  if (loadFailed) {
+    return <p className="text-sm text-danger">Could not load your account. Refresh to try again.</p>;
+  }
 
   if (!account) {
     return <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />;
@@ -80,9 +92,17 @@ export default function AccountPage() {
             <Button
               size="sm"
               disabled={!emailChanged}
-              onClick={() =>
-                send("/api/account", "PATCH", { email, currentPassword: emailPassword }, "Email updated.")
-              }
+              onClick={async () => {
+                const ok = await send(
+                  "/api/account",
+                  "PATCH",
+                  { email, currentPassword: emailPassword },
+                  "Email updated."
+                );
+                // Never leave a live password sitting in state or in a mounted
+                // input once the change has gone through.
+                if (ok) { setEmailPassword(""); setAccount({ ...account, email }); }
+              }}
             >
               Save email
             </Button>

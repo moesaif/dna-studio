@@ -185,6 +185,100 @@ describe("GET /api/settings sources", () => {
     expect(body.sources.videoApiKey.source).toBe("none");
   });
 
+  // The page trusts `effective` to decide which provider is selected. If the
+  // API ignored LLM_PROVIDER, a self-hoster running Anthropic with no saved
+  // settings saw OpenAI selected and "not configured" against OPENAI_API_KEY.
+  it("reports the env-selected provider as effective", async () => {
+    vi.stubEnv("LLM_PROVIDER", "anthropic");
+    vi.stubEnv("IMAGE_PROVIDER", "stability");
+    vi.stubEnv("VIDEO_PROVIDER", "heygen");
+    user.findUnique.mockResolvedValue({ settings: {} } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(body.effective).toEqual({
+      llmProvider: "anthropic",
+      imageProvider: "stability",
+      videoProvider: "heygen",
+    });
+  });
+
+  it("resolves sources against the env-selected provider, not OpenAI", async () => {
+    vi.stubEnv("LLM_PROVIDER", "anthropic");
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-env");
+    vi.stubEnv("OPENAI_API_KEY", "sk-openai-env");
+    user.findUnique.mockResolvedValue({ settings: {} } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(body.sources.llmApiKey).toMatchObject({ source: "env", envVar: "ANTHROPIC_API_KEY" });
+    expect(JSON.stringify(body)).not.toContain("sk-ant-env");
+  });
+
+  it("prefers the saved provider over the environment one", async () => {
+    vi.stubEnv("LLM_PROVIDER", "anthropic");
+    user.findUnique.mockResolvedValue({ settings: { llmProvider: "gemini" } } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(body.effective.llmProvider).toBe("gemini");
+  });
+
+  it("reports the env-selected image and video keys against their own vars", async () => {
+    vi.stubEnv("IMAGE_PROVIDER", "replicate");
+    vi.stubEnv("REPLICATE_API_TOKEN", "r8_env");
+    vi.stubEnv("VIDEO_PROVIDER", "did");
+    vi.stubEnv("DID_API_KEY", "did_env");
+    user.findUnique.mockResolvedValue({ settings: {} } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(body.sources.imageApiKey).toMatchObject({ source: "env", envVar: "REPLICATE_API_TOKEN" });
+    expect(body.sources.videoApiKey).toMatchObject({ source: "env", envVar: "DID_API_KEY" });
+  });
+
+  // A local-Ollama user with nothing set is configured, not unconfigured.
+  it("reports the documented ollama default rather than 'not configured'", async () => {
+    user.findUnique.mockResolvedValue({ settings: {} } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(body.sources.ollamaUrl).toMatchObject({
+      source: "default",
+      masked: "http://localhost:11434",
+    });
+  });
+
+  // A base URL is configuration, not a secret: masking it renders as corruption.
+  it("does not mask a url credential", async () => {
+    user.findUnique.mockResolvedValue({ settings: { ollamaUrl: "http://box.local:11434" } } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(body.sources.ollamaUrl).toMatchObject({
+      source: "user",
+      masked: "http://box.local:11434",
+    });
+  });
+
+  it("still masks api-key credentials", async () => {
+    user.findUnique.mockResolvedValue({ settings: { llmApiKey: "sk-abcdefghijkl" } } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(body.sources.llmApiKey.masked).toBe("sk-a••••ijkl");
+  });
+
+  it("covers every credential field the registry defines", async () => {
+    user.findUnique.mockResolvedValue({ settings: {} } as never);
+
+    const body = await (await getSettings()).json();
+
+    expect(Object.keys(body.sources).sort()).toEqual(
+      ["imageApiKey", "llmApiKey", "ollamaUrl", "videoApiKey"]
+    );
+  });
+
   it("reports the ollama base-url credential against the ollama provider, never the selected LLM provider", async () => {
     vi.stubEnv("OLLAMA_BASE_URL", "http://env-ollama:11434");
     vi.stubEnv("OPENAI_API_KEY", "sk-openai-env");

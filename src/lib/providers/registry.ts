@@ -21,6 +21,30 @@ export interface ProviderDef {
   test(credential: string): Promise<void>;
 }
 
+/** No provider test may take longer than this. */
+const TEST_TIMEOUT_MS = 5000;
+
+/**
+ * Ollama is the one provider whose "credential" is a host the user picks, so
+ * the server can be pointed at anything. Narrow that as far as the feature
+ * allows: reject non-HTTP schemes and rebuild the target from the origin so
+ * neither the path nor a "#" fragment can steer where the request lands.
+ * This is not full SSRF protection — reaching a user-named host is the point
+ * of the feature — it just removes the freely-steerable probe.
+ */
+function ollamaTagsUrl(raw: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("That does not look like a valid URL.");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Only http:// and https:// URLs can be tested.");
+  }
+  return `${parsed.origin}/api/tags`;
+}
+
 /** Turns a fetch response into the message a user should read. */
 async function assertOk(res: Response, provider: string): Promise<void> {
   if (res.ok) return;
@@ -40,7 +64,8 @@ async function getWithHeaders(
 ): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(url, { headers });
+    // A provider test must never be able to hang the request that made it.
+    res = await fetch(url, { headers, signal: AbortSignal.timeout(TEST_TIMEOUT_MS) });
   } catch {
     throw new Error(`Could not reach ${provider}.`);
   }
@@ -80,7 +105,7 @@ export const PROVIDERS: ProviderDef[] = [
     label: "Ollama",
     modelLabel: "Llama 3.1 · local",
     credential: { field: "ollamaUrl", type: "url", envVar: "OLLAMA_BASE_URL", placeholder: "http://localhost:11434" },
-    test: (url) => getWithHeaders(`${url.replace(/\/$/, "")}/api/tags`, {}, "Ollama"),
+    test: async (url) => getWithHeaders(ollamaTagsUrl(url), {}, "Ollama"),
   },
   {
     id: "openai",

@@ -50,7 +50,7 @@ describe("POST /api/settings/providers/test", () => {
     await testProvider(post({ kind: "llm", providerId: "openai" }));
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.openai.com/v1/models",
-      { headers: { Authorization: "Bearer sk-from-env" } }
+      { headers: { Authorization: "Bearer sk-from-env" }, signal: expect.any(AbortSignal) }
     );
   });
 
@@ -58,6 +58,35 @@ describe("POST /api/settings/providers/test", () => {
     const response = await testProvider(post({ kind: "llm", providerId: "openai" }));
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ ok: false });
+  });
+
+  // Ollama needs no configuration to work locally, so "test" must exercise the
+  // documented default instead of refusing with "Nothing to test".
+  it("tests the documented ollama default when nothing is configured", async () => {
+    const response = await testProvider(post({ kind: "llm", providerId: "ollama" }));
+    expect(response.status).toBe(200);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:11434/api/tags");
+  });
+
+  it("rejects an ollama url that is not a url, without calling out", async () => {
+    const body = await (await testProvider(
+      post({ kind: "llm", providerId: "ollama", credential: "not a url" })
+    )).json();
+    expect(body).toEqual({ ok: false, message: "That does not look like a valid URL." });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a file:// ollama url, without calling out", async () => {
+    const body = await (await testProvider(
+      post({ kind: "llm", providerId: "ollama", credential: "file:///etc/passwd" })
+    )).json();
+    expect(body.ok).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("cannot be steered off /api/tags by a path or fragment", async () => {
+    await testProvider(post({ kind: "llm", providerId: "ollama", credential: "http://10.0.0.1:22/probe#" }));
+    expect(fetchMock.mock.calls[0][0]).toBe("http://10.0.0.1:22/api/tags");
   });
 
   it("answers 400 for a provider that is not in the registry", async () => {

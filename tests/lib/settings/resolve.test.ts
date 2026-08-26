@@ -62,6 +62,21 @@ describe("resolveSettings", () => {
       expect(settings.llmModel).toBe("llama3.1");
     });
 
+    // Regression: the credential lookup keys off the SELECTED provider, and
+    // "llm" covers both llmApiKey and ollamaUrl. Resolving llmApiKey against
+    // ollama once returned OLLAMA_BASE_URL as if it were an API key, which
+    // every Docker deployment would hit (docker-compose always sets it) and
+    // which the sibling case above cannot see, because the suite deletes
+    // OLLAMA_BASE_URL before each run.
+    it("still leaves the key empty for ollama when OLLAMA_BASE_URL is set", async () => {
+      vi.stubEnv("LLM_PROVIDER", "ollama");
+      vi.stubEnv("OLLAMA_BASE_URL", "http://ollama:11434");
+
+      const settings = await resolveSettings();
+      expect(settings.llmApiKey).toBe("");
+      expect(settings.ollamaUrl).toBe("http://ollama:11434");
+    });
+
     it("honours per-provider model overrides", async () => {
       vi.stubEnv("OPENAI_MODEL", "gpt-4o-mini");
       expect((await resolveSettings()).llmModel).toBe("gpt-4o-mini");

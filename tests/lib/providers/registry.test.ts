@@ -69,7 +69,7 @@ describe("provider test()", () => {
     await expect(findProvider("llm", "openai")!.test("sk-good")).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.openai.com/v1/models",
-      { headers: { Authorization: "Bearer sk-good" } }
+      { headers: { Authorization: "Bearer sk-good" }, signal: expect.any(AbortSignal) }
     );
   });
 
@@ -99,6 +99,59 @@ describe("provider test()", () => {
   it("normalises a trailing slash on the ollama url", async () => {
     fetchMock.mockResolvedValue({ ok: true, status: 200 });
     await findProvider("llm", "ollama")!.test("http://localhost:11434/");
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:11434/api/tags", { headers: {} });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:11434/api/tags",
+      { headers: {}, signal: expect.any(AbortSignal) }
+    );
+  });
+
+  it("bounds every provider test with a timeout signal", async () => {
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+    await findProvider("llm", "openai")!.test("sk-good");
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+// The Ollama test is the one path where a signed-in user names the host the
+// server calls. It must not become a general-purpose probe.
+describe("ollama url hardening", () => {
+  const fetchMock = vi.fn();
+  const ollama = findProvider("llm", "ollama")!;
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValue({ ok: true, status: 200 });
+  });
+
+  it("rejects a string that is not a URL, without calling out", async () => {
+    await expect(ollama.test("not a url at all")).rejects.toThrow(
+      "That does not look like a valid URL."
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-http scheme, without calling out", async () => {
+    await expect(ollama.test("file:///etc/passwd")).rejects.toThrow(/http/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a scheme-less host, without calling out", async () => {
+    await expect(ollama.test("localhost:11434")).rejects.toThrow(/http/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a fragment that would otherwise truncate the /api/tags suffix", async () => {
+    await ollama.test("http://localhost:11434/#");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:11434/api/tags");
+  });
+
+  it("ignores an attacker-chosen path and query", async () => {
+    await ollama.test("http://localhost:9200/_cluster/health?pretty=1");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:9200/api/tags");
+  });
+
+  it("still allows an https host", async () => {
+    await expect(ollama.test("https://ollama.example.com")).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[0][0]).toBe("https://ollama.example.com/api/tags");
   });
 });

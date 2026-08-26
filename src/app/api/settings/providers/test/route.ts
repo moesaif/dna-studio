@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { findProvider } from "@/lib/providers/registry";
 import { checkCooldown } from "@/lib/providers/cooldown";
-import { resolveCredential, type UserSettings } from "@/lib/settings/resolve";
+import { resolveCredentialWithDefault, type UserSettings } from "@/lib/settings/resolve";
 
 const schema = z.object({
   kind: z.enum(["llm", "image", "video"]),
@@ -37,7 +37,9 @@ export async function POST(request: Request) {
         select: { settings: true },
       });
       const settings = (stored?.settings as unknown as UserSettings) || {};
-      value = resolveCredential(provider.credential.field, providerId, settings).value;
+      // WithDefault so a local-Ollama user with nothing configured tests the
+      // documented default the app would actually call, not "Nothing to test".
+      value = resolveCredentialWithDefault(provider.credential.field, providerId, settings).value;
     }
 
     if (!value) {

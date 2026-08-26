@@ -8,6 +8,8 @@ import { providersOfKind, type ProviderKind } from "@/lib/providers/registry";
 interface SettingsPayload {
   settings: Record<string, string | undefined>;
   sources: Record<string, SourceInfo>;
+  /** Provider actually in force per kind, including ones chosen by env var. */
+  effective: Record<string, string>;
 }
 
 interface SectionConfig {
@@ -24,41 +26,61 @@ const SECTIONS: SectionConfig[] = [
   { kind: "video", title: "VIDEO", blurb: "UGC Studio", feature: "UGC Studio", providerField: "videoProvider" },
 ];
 
-const DEFAULT_PROVIDER: Record<string, string> = {
-  llmProvider: "openai", imageProvider: "openai", videoProvider: "veo",
-};
-
 export default function ProvidersPage() {
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/settings");
-    setData(await res.json());
-    setDraft({});
+    try {
+      const res = await fetch("/api/settings");
+      if (!res.ok) {
+        setError("Could not load your providers. Refresh to try again.");
+        return;
+      }
+      setData(await res.json());
+      setDraft({});
+      setError(null);
+    } catch {
+      setError("Could not load your providers. Refresh to try again.");
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   if (!data) {
-    return <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />;
+    return error
+      ? <p className="text-sm text-danger">{error}</p>
+      : <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />;
   }
 
+  // The saved value wins, then whatever the server reports as effective —
+  // which already folds in LLM_PROVIDER / IMAGE_PROVIDER / VIDEO_PROVIDER, so
+  // an env-selected provider is shown as selected instead of defaulting to
+  // OpenAI and warning about a key the app would never read.
   const valueOf = (field: string) =>
-    draft[field] ?? data.settings[field] ?? DEFAULT_PROVIDER[field] ?? "";
+    draft[field] ?? data.settings[field] ?? data.effective[field] ?? "";
   const set = (field: string, value: string) => setDraft((d) => ({ ...d, [field]: value }));
   const dirty = Object.keys(draft).length > 0;
 
   async function save() {
     setSaving(true);
     try {
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(draft),
       });
+      if (!res.ok) {
+        // Keep the draft so nothing the user typed is lost.
+        setError("Could not save. Your changes are still here — try again.");
+        return;
+      }
+      setError(null);
       await load();
+    } catch {
+      setError("Could not save. Your changes are still here — try again.");
     } finally {
       setSaving(false);
     }
@@ -104,7 +126,9 @@ export default function ProvidersPage() {
 
       {dirty && (
         <div className="sticky bottom-0 -mx-8 flex items-center justify-between border-t border-border bg-surface px-8 py-3">
-          <span className="text-xs text-accent">Unsaved changes</span>
+          <span className={error ? "text-xs text-danger" : "text-xs text-accent"}>
+            {error ?? "Unsaved changes"}
+          </span>
           <Button size="sm" loading={saving} onClick={save}>Save</Button>
         </div>
       )}

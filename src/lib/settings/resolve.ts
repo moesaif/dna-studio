@@ -24,7 +24,10 @@ export interface UserSettings {
   videoApiKey?: string;
 }
 
-export type CredentialOrigin = "user" | "env" | "none";
+export type CredentialOrigin = "user" | "env" | "default" | "none";
+
+/** Ollama serves here out of the box, so an unset base URL is still a working one. */
+export const DEFAULT_OLLAMA_URL = "http://localhost:11434";
 
 export interface ResolvedCredential {
   value: string;
@@ -51,7 +54,10 @@ export function resolveCredential(
   env: Partial<NodeJS.ProcessEnv> = process.env
 ): ResolvedCredential {
   const provider = findProvider(KIND_OF_FIELD[field], providerId);
-  const envVar = provider?.credential.envVar;
+  // Only borrow the provider's env var when that provider actually backs THIS
+  // field. "llm" covers both llmApiKey and ollamaUrl, so resolving llmApiKey
+  // against "ollama" would otherwise hand back OLLAMA_BASE_URL as an API key.
+  const envVar = provider?.credential.field === field ? provider.credential.envVar : undefined;
 
   const saved = userSettings[field];
   if (saved) return { value: saved, origin: "user", envVar };
@@ -60,6 +66,45 @@ export function resolveCredential(
   if (fromEnv) return { value: fromEnv, origin: "env", envVar };
 
   return { value: "", origin: "none", envVar };
+}
+
+/**
+ * Like resolveCredential, but also applies the documented default a field has
+ * when nothing is configured. Kept beside the raw resolver so the settings
+ * surface reports exactly what the app will use.
+ */
+export function resolveCredentialWithDefault(
+  field: CredentialField,
+  providerId: string,
+  userSettings: UserSettings,
+  env: Partial<NodeJS.ProcessEnv> = process.env
+): ResolvedCredential {
+  const resolved = resolveCredential(field, providerId, userSettings, env);
+  if (resolved.value || field !== "ollamaUrl") return resolved;
+  return { value: DEFAULT_OLLAMA_URL, origin: "default", envVar: resolved.envVar };
+}
+
+export interface EffectiveProviders {
+  llmProvider: string;
+  imageProvider: string;
+  videoProvider: string;
+}
+
+/**
+ * Which provider each kind actually runs on: the user's saved choice, then the
+ * documented environment variable, then the default. Anything that reports on
+ * settings must select through this or it will resolve credentials against a
+ * provider the app is not using.
+ */
+export function resolveProviders(
+  userSettings: UserSettings,
+  env: Partial<NodeJS.ProcessEnv> = process.env
+): EffectiveProviders {
+  return {
+    llmProvider: userSettings.llmProvider || env.LLM_PROVIDER || "openai",
+    imageProvider: userSettings.imageProvider || env.IMAGE_PROVIDER || "openai",
+    videoProvider: userSettings.videoProvider || env.VIDEO_PROVIDER || "veo",
+  };
 }
 
 /**
@@ -83,7 +128,7 @@ export async function resolveSettings(): Promise<ResolvedSettings> {
     // Fall through to env vars
   }
 
-  const llmProvider = userSettings.llmProvider || process.env.LLM_PROVIDER || "openai";
+  const { llmProvider, imageProvider, videoProvider } = resolveProviders(userSettings);
 
   const llmApiKey = resolveCredential("llmApiKey", llmProvider, userSettings).value;
 
@@ -106,16 +151,11 @@ export async function resolveSettings(): Promise<ResolvedSettings> {
     }
   }
 
-  const imageProvider = userSettings.imageProvider || process.env.IMAGE_PROVIDER || "openai";
-
   const imageApiKey = resolveCredential("imageApiKey", imageProvider, userSettings).value;
-
-  const videoProvider = userSettings.videoProvider || process.env.VIDEO_PROVIDER || "veo";
 
   const videoApiKey = resolveCredential("videoApiKey", videoProvider, userSettings).value;
 
-  const ollamaUrl =
-    resolveCredential("ollamaUrl", "ollama", userSettings).value || "http://localhost:11434";
+  const ollamaUrl = resolveCredentialWithDefault("ollamaUrl", "ollama", userSettings).value;
 
   return {
     llmProvider,

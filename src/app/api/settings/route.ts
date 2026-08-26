@@ -2,15 +2,29 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { PROVIDERS, type CredentialField } from "@/lib/providers/registry";
-import { resolveCredential, type UserSettings } from "@/lib/settings/resolve";
+import {
+  PROVIDERS,
+  findProvider,
+  type CredentialField,
+  type ProviderKind,
+} from "@/lib/providers/registry";
+import {
+  resolveCredentialWithDefault,
+  resolveProviders,
+  type EffectiveProviders,
+  type UserSettings,
+} from "@/lib/settings/resolve";
 
+// Derived, not hand-listed: a provider added to the registry with a new
+// credential field is reported here without editing this file.
 const CREDENTIAL_FIELDS: CredentialField[] = [
-  "llmApiKey",
-  "imageApiKey",
-  "videoApiKey",
-  "ollamaUrl",
+  ...new Set(PROVIDERS.map((p) => p.credential.field)),
 ];
+
+/** Which kind each credential field belongs to, straight from the registry. */
+const KIND_OF_FIELD = Object.fromEntries(
+  PROVIDERS.map((p) => [p.credential.field, p.kind])
+) as Record<CredentialField, ProviderKind>;
 
 const idsOf = (kind: "llm" | "image" | "video") =>
   PROVIDERS.filter((p) => p.kind === kind).map((p) => p.id) as [string, ...string[]];
@@ -46,24 +60,26 @@ function keepIfMasked(submitted: string | undefined, stored: string | undefined)
  * happens to be selected (e.g. "openai"), or the report would claim an
  * environment variable (OPENAI_API_KEY) that the resolver would never
  * actually use to back the Ollama URL.
+ *
+ * The selected provider is the EFFECTIVE one (saved choice, then
+ * LLM_PROVIDER/IMAGE_PROVIDER/VIDEO_PROVIDER, then the default), so a
+ * self-hoster who selects a provider purely through the environment is
+ * reported against that provider's key rather than OpenAI's.
  */
-function buildSources(settings: UserSettings) {
+function buildSources(settings: UserSettings, effective: EffectiveProviders) {
   const sources: Record<string, unknown> = {};
   for (const field of CREDENTIAL_FIELDS) {
-    const providerId =
-      field === "imageApiKey"
-        ? (settings.imageProvider ?? "openai")
-        : field === "videoApiKey"
-          ? (settings.videoProvider ?? "veo")
-          : field === "ollamaUrl"
-            ? "ollama"
-            : (settings.llmProvider ?? "openai");
+    const kind = KIND_OF_FIELD[field];
+    const providerId = field === "ollamaUrl" ? "ollama" : effective[`${kind}Provider`];
 
-    const { origin, envVar, value } = resolveCredential(field, providerId, settings);
+    const { origin, envVar, value } = resolveCredentialWithDefault(field, providerId, settings);
+    // A base URL is configuration, not a secret. Masking it would show the user
+    // "http••••1434" in place of the value they typed.
+    const isUrl = findProvider(kind, providerId)?.credential.type === "url";
     sources[field] = {
       source: origin,
       envVar,
-      masked: value ? maskKey(value) : undefined,
+      masked: value ? (isUrl ? value : maskKey(value)) : undefined,
     };
   }
   return sources;
@@ -86,7 +102,13 @@ export async function GET() {
       ...(settings.videoApiKey ? { videoApiKey: maskKey(settings.videoApiKey) } : {}),
     };
 
-    return NextResponse.json({ settings: masked, sources: buildSources(settings) });
+    const effective = resolveProviders(settings);
+
+    return NextResponse.json({
+      settings: masked,
+      sources: buildSources(settings, effective),
+      effective,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
